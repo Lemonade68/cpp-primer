@@ -1,0 +1,22 @@
+对 QueryResult.h、TextQuery.h 和 StrBlob.h进行如下修改:
+
+1. 在 QueryResult.h 中包含头文件 StrBlob.h
+
+2. QueryResult 类的 file 成员改为 StrBlob 类型，
+    相应的，构造函数的第三个参数和成员函数 get_file 的返回类型也都改为 StrBlob 类型
+
+3. 类似的 TextQuery 类的成员 file 也改为 StrBlob 类型
+
+4. 由于 file 不再是 shared_ptr 而是 StrBlob，TextQuery 构造函数
+    （TextQuery.cpp）中的 file-> 均改为 file.
+
+5. 在原来的代码中，TextQuery 构造函数动态分配了一个 vector<string>，用其指针初始化 
+    file 成员（shared_ptr）。但 StrBlob 类并未定义接受 vector<string> * 的构造函数，
+    因此我们在 StrBlob.h 文件中为其添加了这个构造函数，用指针参数直接初始化 data 成员
+    （shared_ptr）
+
+6. 在函数 print（TextQuery.cpp）中，用 file->begin() 获得了 vector 的首位置迭代器，
+    对其进行加法操作获得了指向第 num 个 string 的迭代器，最后通过解引用获得了这个 string，
+    将其打印出来。但 StrBlobPtr 只定义了递增和递减操作，并未定义加法运算。因此，我们为其增加
+    了 StrBlob.h 接受一个整型参数 off 的 deref 操作，能解引用出距离当前位置 curr 偏移量为
+    off 的元素（但并不会修改 curr 的值）

@@ -1,0 +1,290 @@
+#ifndef STRVEC
+#define STRVEC
+
+#include<iostream>
+
+#include<string>
+using std::string;
+
+#include<memory>
+using std::allocator;
+using std::uninitialized_copy;
+
+#include<utility>
+using std::pair;
+
+using std::make_move_iterator;
+
+#include<initializer_list>
+using std::initializer_list;
+
+#include<algorithm>
+using std::equal;
+using std::for_each;
+
+class StrVec{
+public:
+    friend bool operator==(const StrVec &, const StrVec &);
+    friend bool operator!=(const StrVec &, const StrVec &);
+    friend bool operator<(const StrVec &s1, const StrVec &s2);
+    friend bool operator<=(const StrVec &s1, const StrVec &s2);
+    friend bool operator>(const StrVec &s1, const StrVec &s2);
+    friend bool operator>=(const StrVec &s1, const StrVec &s2);
+
+public:
+    StrVec():elements(nullptr), first_free(nullptr), cap(nullptr){ }
+    StrVec(const StrVec &);
+    StrVec(StrVec &&) noexcept;     //移动构造函数不需要const，且noexcept在声明和定义时都需要加
+    ~StrVec();
+    
+public:
+    StrVec &operator=(const StrVec &);
+    StrVec &operator=(StrVec &&);
+    //练习14.23,     注意initializer_list只复制一对指针，复制的代价很小，不需要const &
+    StrVec &operator=(initializer_list<string>);
+    //下标运算符，注意有两个版本，针对const对象和非const对象
+    string &operator[](size_t n) { return elements[n]; }
+    const string &operator[](size_t n) const { return elements[n]; }
+
+    void push_back(const string &);     //拷贝元素
+    void push_back(string &&);          //移动元素
+    const size_t size() const{ return first_free - elements; }
+    const size_t capacity() const{ return cap - elements; }
+    string *begin() { return elements; }
+    string *end() { return cap; }
+    const string *begin() const { return elements; }
+    const string *end() const { return cap; }
+
+    //练习13.39
+    void reserve(size_t n){ if(n>capacity()) reallocate(n); }       //预留一部分空间
+    void resize(size_t);
+    void resize(size_t, const string &);
+
+    //练习13.40
+    StrVec(initializer_list<string>);
+
+private:
+    static allocator<string> alloc;     //分配元素，共用一个即可
+    
+    // 添加元素的函数使用
+    void chk_n_alloc() { if(size() == capacity())  reallocate(); }      
+    
+    //工具函数，被拷贝构造函数，赋值运算符和析构函数使用
+    pair<string *, string *> alloc_n_copy(const string *, const string *);
+    void free();                //销毁元素，释放内存
+    void reallocate();          //获得更多内存，并拷贝已有元素
+
+    string *elements;           //指向数组首元素的指针
+    string *first_free;         //指向数组第一个空闲元素的指针
+    string *cap;                //指向数组尾后位置的指针
+    
+    void reallocate(size_t);    //重载形式
+};
+
+bool operator==(const StrVec &, const StrVec &);
+bool operator!=(const StrVec &, const StrVec &);
+bool operator<(const StrVec &s1, const StrVec &s2);
+bool operator<=(const StrVec &s1, const StrVec &s2);
+bool operator>(const StrVec &s1, const StrVec &s2);
+bool operator>=(const StrVec &s1, const StrVec &s2);
+
+
+
+
+
+//剩下部分应该放在cpp文件中
+
+//静态成员变量要在cpp文件中定义
+allocator<string> StrVec::alloc;
+
+void StrVec::push_back(const string &s){
+    chk_n_alloc();              //确保有空间容纳新元素
+    alloc.construct(first_free++, s);       
+}
+
+void StrVec::push_back(string &&s){
+    chk_n_alloc();
+    alloc.construct(first_free++, std::move(s));    //注意这边不传s，因为s也是一个左值
+}
+
+pair<string*, string*> StrVec::alloc_n_copy(const string *b, const string *e){      //n - and
+    //分配空间保存给定范围中的元素
+    auto data = alloc.allocate(e - b);
+    //初始化并返回一个pair，由data（首地址）和uninitialized_copy的返回值（尾后指针）构成
+    return {data, uninitialized_copy(b, e, data)};
+}
+
+void StrVec::free(){
+    //不能传递给deallocate一个空指针，如果elements为空，则什么也不做
+    if(elements){
+        for (auto p = first_free; p != elements; )      //不能使用range for，直接修改元素
+            alloc.destroy(--p);
+        //使用for_each和lambda函数版本
+        // for_each(elements, first_free, [this](string &s) {alloc.destroy(&s);});
+        alloc.deallocate(elements, capacity());
+    }
+}
+
+StrVec::StrVec(const StrVec &s){
+    auto newdata = alloc_n_copy(s.begin(), s.end());
+    elements = newdata.first;
+    first_free = cap = newdata.second;
+}
+
+StrVec::StrVec(StrVec &&s) noexcept : elements(s.elements),first_free(s.first_free),cap(s.cap){
+    s.elements = s.first_free = s.cap = nullptr;
+}
+
+StrVec::~StrVec(){
+    free();
+}
+
+StrVec& StrVec::operator=(const StrVec &rhs){
+    auto newdata = alloc_n_copy(rhs.begin(), rhs.end());        //这一步优先：解决自赋值问题
+    free();
+    elements = newdata.first;
+    first_free = cap = newdata.second;
+    return *this;
+}
+
+StrVec& StrVec::operator=(StrVec &&rhs){
+    if(this != &rhs){                   //直接检测自赋值
+        free();
+        elements = rhs.elements;
+        first_free = rhs.first_free;
+        cap = rhs.cap;
+        rhs.elements = rhs.first_free = rhs.cap = nullptr;
+    }
+    return *this;
+}
+
+void StrVec::reallocate(){
+    auto newcapacity = size() ? 2 * size() : 1;     //分配两倍的大小，若为空，则分配大小为1的内存
+    auto newdata = alloc.allocate(newcapacity);     //分配新内存
+
+    //将数据从旧内存移动到新内存
+    auto dest = newdata;                //指向新数组中的下一个空闲位置
+    auto elem = elements;               //指向旧数组中的下一个元素
+    for (size_t i = 0; i != size(); ++i){
+        alloc.construct(dest++, std::move(*elem++));        //std::move返回一个右值引用，construct利用右值引用达成移动的效果
+    }
+    free();                             //移动完元素就是放旧内存空间
+    elements = newdata;
+    first_free = dest;
+    cap = elements + newcapacity;
+}
+
+void StrVec::reallocate(size_t newcapacity){
+    auto newdata = alloc.allocate(newcapacity);
+
+    auto dest = newdata;                //指向目的地，供construct第一个参数使用
+    auto elem = elements;               
+
+    for (size_t i = 0; i < size(); ++i)
+        alloc.construct(dest++, std::move(*elem++));
+    free();
+
+    elements = newdata;
+    first_free = elem;
+    cap = elements + newcapacity;
+}
+
+
+//使用移动迭代器版本的reallocate
+void StrVec::reallocate(){
+    auto newcapacity = size() ? 2 * size() : 1;
+    auto first = alloc.allocate(newcapacity);
+
+    auto last = uninitialized_copy(make_move_iterator(begin()), make_move_iterator(end()), first);
+    free();
+
+    elements = first;
+    first_free = last;
+    cap = elements + newcapacity;
+}
+
+
+void StrVec::resize(size_t count){
+    resize(count, string());            //利用自己的重载版本
+}
+
+void StrVec::resize(size_t count, const string &s){
+    if(count > size()){
+        if(count > capacity())
+            reserve(count * 2);         //预留多余的空间
+        for (auto i = size(); i != count; ++i)
+            alloc.construct(first_free++, s);
+    }
+    else if(count < size()){
+        while(first_free != elements + count)
+            alloc.destroy(--first_free);
+    }
+}
+
+StrVec::StrVec(initializer_list<string> il){
+    auto newdata = alloc_n_copy(il.begin(), il.end());
+    elements = newdata.first;
+    cap = first_free = newdata.second;
+}
+
+
+//练习14.3.1
+// bool operator==(const StrVec &lhs, const StrVec &rhs){
+//     //如果大小不相等，肯定不等；    但注意比较vector和预分配的大小无关，只与当前容器中含有的元素个数相关
+//     if(lhs.size() != rhs.size())
+//         return false;
+
+//     //判断每个元素是否相等
+//     for (auto it1 = lhs.begin(), it2 = rhs.begin(); it1 != lhs.end(), it2 != rhs.end(); ++it1, ++it2)
+//         if(*it1 != *it2)
+//             return false;
+
+//     return true;
+// }
+
+//学习这种写法
+bool operator==(const StrVec &lhs, const StrVec &rhs){
+    return (lhs.size() == rhs.size() && equal(lhs.begin(), lhs.end(), rhs.begin()));
+}
+
+bool operator!=(const StrVec &lhs, const StrVec &rhs){
+    return !(lhs == rhs);
+}
+
+bool operator<(const StrVec &s1, const StrVec &s2) {
+    auto p1 = s1.begin(), p2 = s2.begin();
+    for ( ; p1 != s1.end() && p2 != s2.end(); ++p1, ++p2) {
+        if (*p1 < *p2)          // 之前的 string 都相等，当前 string 更小
+            return true;
+        else if (*p1 > *p2)     // 之前的 string 都相等，当前 string 更大
+            return false;
+    }
+    // s1 中的所有 string 都与 s2 中的 string 相等，且 s1 更短
+    if (p1 == s1.end() && p2 != s2.end())
+        return true;
+    return false;
+}
+
+bool operator>(const StrVec &s1, const StrVec &s2) {
+    return s2 < s1;
+}
+
+bool operator<=(const StrVec &s1, const StrVec &s2) {
+    return !(s2 < s1);
+}
+
+bool operator>=(const StrVec &s1, const StrVec &s2) {
+    return !(s1 < s2);
+}
+
+
+// 练习14.23
+StrVec& StrVec::operator=(initializer_list<string> il){
+    auto data = alloc_n_copy(il.begin(), il.end());
+    free();                                 //销毁原对象
+    elements = data.first;
+    first_free = cap = data.second;         //注意cap也需要赋值
+    return *this;
+}
+
+#endif

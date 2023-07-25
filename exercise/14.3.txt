@@ -1,0 +1,7 @@
+14.3节中增加重载运算符的文件：
+main_content 的 12_StrBlob.h   
+main_content 的 13_StrVec.h
+exercise 的 13.5_String.h
+
+
+学习使用 equal 和 lexicographical_compare

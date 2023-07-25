@@ -1,0 +1,11 @@
+1
+2
+3
+5
+7
+9
+8
+5
+6
+string char int main
+end.

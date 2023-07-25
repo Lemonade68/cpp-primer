@@ -1,0 +1,4 @@
+具体实现看VS上的那个项目
+vscode这边暂时实现不了    不知道怎么分离编译
+
+exercise里12.32文件夹中还有使用之前定义的strblob来代替shared_ptr<vector<string>>的操作
